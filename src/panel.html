@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg:     #071918;
+    --accent: #2dd4bf;
+    --danger: #b060c0;
+    --text:   #c8ede8;
+
+    --bg-2:   color-mix(in srgb, var(--bg), white 6%);
+    --bg-3:   color-mix(in srgb, var(--bg), white 3%);
+    --bg-4:   color-mix(in srgb, var(--bg), white 11%);
+    --bd-1:   color-mix(in srgb, var(--bg), white 16%);
+    --bd-2:   color-mix(in srgb, var(--bg), white 27%);
+    --bd-3:   color-mix(in srgb, var(--accent), var(--bg) 50%);
+    --tx-1:   color-mix(in srgb, var(--text), var(--bg) 72%);
+    --tx-2:   color-mix(in srgb, var(--text), var(--bg) 52%);
+    --tx-3:   color-mix(in srgb, var(--text), var(--bg) 20%);
+    --tx-hi:  color-mix(in srgb, var(--text), white 18%);
+    --ac-dim: color-mix(in srgb, var(--accent), var(--bg) 35%);
+    --ac-hi:  color-mix(in srgb, var(--accent), white 18%);
+    --dn-dim: color-mix(in srgb, var(--danger), var(--bg) 60%);
+    --dn-bg:  color-mix(in srgb, var(--danger), var(--bg) 88%);
+
+    --font-size:   13px;
+    --font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+
+    /* Derived font sizes — scale with --font-size automatically */
+    --fs-xs: calc(var(--font-size) * 0.77);
+    --fs-sm: calc(var(--font-size) * 0.923);
+    --fs-md: calc(var(--font-size) * 1.154);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-family);
+    font-size: var(--font-size);
+    background: var(--bg);
+    color: var(--text);
+    user-select: none;
+  }
+
+  /* ─── Task list ──────────────────────────────────────────── */
+  #new-task-area {
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 10px 6px;
+    border-bottom: 1px solid var(--bd-1);
+  }
+  #new-task-input, #new-task-client {
+    width: 100%;
+    background: var(--bg-2);
+    border: 1px solid var(--bd-2);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: var(--font-size);
+    padding: 5px 8px;
+    outline: none;
+    font-family: var(--font-family);
+    user-select: text;
+  }
+  #new-task-input:focus, #new-task-client:focus { border-color: var(--bd-3); }
+  #new-task-client { font-size: var(--fs-xs); color: var(--tx-3); }
+  #new-task-client::placeholder { color: var(--tx-1); }
+
+  #task-list { padding: 4px 0; }
+
+  @keyframes jitlog-pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.3; }
+  }
+
+  .task-row {
+    display: flex; align-items: center;
+    padding: 6px 10px; cursor: pointer;
+    border-radius: 4px; margin: 1px 4px; gap: 6px; height: 32px;
+  }
+  .task-row:hover, .task-row.highlighted { background: var(--bg-4); }
+  .task-row.highlighted { outline: 1px solid var(--bd-3); }
+  .task-row.drag-over { outline: 1px solid var(--accent); background: var(--bg-4); opacity: 0.85; }
+  .task-row.dragging { opacity: 0.4; }
+
+  .task-row.active-task {
+    background: color-mix(in srgb, var(--accent), var(--bg) 91%);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  .task-row.active-task:hover,
+  .task-row.active-task.highlighted {
+    background: color-mix(in srgb, var(--accent), var(--bg) 84%);
+  }
+
+  .task-num {
+    font-size: var(--fs-xs); color: var(--tx-1); width: 10px;
+    text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums;
+  }
+  .task-row:hover .task-num, .task-row.highlighted .task-num { color: var(--tx-2); }
+
+  .task-icon {
+    font-size: var(--fs-sm); width: 18px; height: 18px;
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0; color: var(--tx-2); cursor: pointer; line-height: 1;
+  }
+  .task-icon.active {
+    color: var(--accent);
+    animation: jitlog-pulse 2s ease-in-out infinite;
+  }
+  .task-icon.paused { color: var(--ac-dim); }
+  .task-icon:hover { color: var(--ac-hi); animation: none; }
+
+  .task-name {
+    flex: 1; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; color: var(--tx-3); min-width: 0;
+  }
+  .task-row.active-task .task-name { color: var(--tx-hi); }
+
+  .task-client {
+    font-size: var(--fs-xs); color: var(--tx-1); white-space: nowrap; flex-shrink: 0;
+    background: var(--bg-2); border: 1px solid var(--bd-1);
+    border-radius: 3px; padding: 1px 4px; line-height: 1.5;
+  }
+
+  .task-right {
+    flex-shrink: 0; display: flex; align-items: center;
+    gap: 4px; justify-content: flex-end;
+  }
+
+  .task-elapsed {
+    font-variant-numeric: tabular-nums; font-size: var(--fs-sm);
+    color: var(--tx-2); min-width: 44px; text-align: right; letter-spacing: 0.02em;
+  }
+  .task-row.active-task .task-elapsed { color: var(--accent); }
+
+  .task-actions { display: none; gap: 3px; }
+  .task-row:hover .task-actions,
+  .task-row.highlighted .task-actions,
+  .task-row.active-task .task-actions { display: flex; }
+
+  .act-btn {
+    padding: 1px 4px; background: var(--bg-2); border: 1px solid var(--bd-2);
+    border-radius: 3px; color: var(--ac-dim); font-size: var(--fs-xs);
+    font-family: var(--font-family); cursor: pointer; line-height: 1.3;
+  }
+  .act-btn:hover { background: var(--bg-4); color: var(--text); border-color: var(--tx-2); }
+
+  #divider { height: 1px; background: var(--bg-2); margin: 3px 0; }
+
+  .action-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+    cursor: pointer; border-radius: 4px; margin: 1px 4px;
+    color: var(--tx-3); font-size: var(--fs-sm); min-height: 30px;
+  }
+  .action-row svg { flex-shrink: 0; opacity: 0.75; }
+  .action-row:hover svg, .action-row.highlighted svg { opacity: 1; }
+  .action-row:hover, .action-row.highlighted { background: var(--bg-4); color: var(--ac-hi); }
+  .action-row.highlighted { outline: 1px solid var(--bd-3); }
+  #action-quit {
+    color: var(--dn-dim); border-top: 1px solid var(--bg-2);
+    margin-top: 1px; margin-bottom: 5px;
+  }
+  #action-quit:hover { background: var(--dn-bg); color: var(--danger); }
+
+  /* ─── Shared view header ─────────────────────────────────── */
+  .view-header {
+    display: flex; align-items: center; padding: 8px 10px;
+    border-bottom: 1px solid var(--bd-1); gap: 8px;
+  }
+  .view-back { cursor: pointer; color: var(--tx-2); font-size: 18px; line-height: 1; flex-shrink: 0; }
+  .view-back:hover { color: var(--ac-hi); }
+  .view-title {
+    flex: 1; font-size: var(--font-size); font-weight: 600; color: var(--tx-3);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* ─── Docs view ──────────────────────────────────────────── */
+  #view-docs { display: none; }
+  #docs-link-row {
+    display: flex; align-items: center;
+    padding: 5px 10px; gap: 6px; border-bottom: 1px solid var(--bg-4);
+  }
+  #docs-link-icon { font-size: var(--fs-xs); color: var(--tx-2); flex-shrink: 0; }
+  #docs-link-input {
+    flex: 1; background: none; border: none; outline: none;
+    color: var(--tx-3); font-size: var(--fs-xs); font-family: var(--font-family); user-select: text;
+  }
+  #docs-link-input::placeholder { color: var(--tx-1); }
+  #docs-link-input:focus { color: var(--text); }
+  #docs-editor {
+    display: block; width: 100%; height: 320px; overflow-y: auto;
+    background: var(--bg-3); color: var(--text); font-size: var(--font-size);
+    padding: 10px; outline: none; font-family: var(--font-family);
+    line-height: 1.5; user-select: text; white-space: pre-wrap;
+    word-break: break-word; cursor: text;
+  }
+  #docs-editor img { max-width: 100%; display: block; margin: 6px 0; border-radius: 3px; cursor: default; }
+
+  /* ─── History view ───────────────────────────────────────── */
+  #view-history { display: none; flex-direction: column; height: 100vh; }
+  #hist-list { flex: 1; overflow-y: auto; min-height: 0; padding: 4px 0; }
+  .date-label {
+    font-size: var(--fs-xs); font-weight: 600; color: var(--tx-2);
+    padding: 4px 10px 2px; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .hist-row { display: flex; align-items: center; padding: 5px 10px; gap: 6px; cursor: pointer; }
+  .hist-row:hover { background: var(--bg-4); }
+  .hist-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--tx-3); font-size: var(--fs-sm); }
+  .hist-client { font-size: var(--fs-xs); color: var(--tx-1); flex-shrink: 0; white-space: nowrap; }
+  .hist-elapsed { font-variant-numeric: tabular-nums; font-size: var(--fs-xs); color: var(--tx-3); flex-shrink: 0; min-width: 36px; text-align: right; }
+  .hist-icon { flex-shrink: 0; color: var(--tx-1); font-size: var(--fs-sm); opacity: 0; cursor: pointer; line-height: 1; }
+  .hist-row:hover .hist-icon { opacity: 1; }
+  .hist-revive:hover { color: var(--accent); }
+  .hist-del:hover { color: var(--danger); }
+
+  /* ─── Settings view ──────────────────────────────────────── */
+  #view-settings { display: none; flex-direction: column; height: 100vh; }
+  #settings-scroll { flex: 1; overflow-y: auto; min-height: 0; padding: 4px 0 0; }
+  .settings-section { padding: 8px 12px; }
+  .settings-section + .settings-section { border-top: 1px solid var(--bd-1); }
+  .settings-label {
+    font-size: var(--fs-xs); font-weight: 600; color: var(--tx-1);
+    text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px;
+  }
+
+  .theme-chips { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 6px; }
+  .theme-chip {
+    display: flex; align-items: center; gap: 5px; padding: 4px 8px;
+    border-radius: 4px; border: 1px solid var(--bd-2); background: var(--bg-2);
+    cursor: pointer; font-size: var(--fs-xs); color: var(--tx-3); font-family: var(--font-family);
+    transition: border-color 0.1s;
+  }
+  .theme-chip:hover { border-color: var(--bd-3); color: var(--text); }
+  .theme-chip.active { border-color: var(--accent); color: var(--accent); }
+  .theme-swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .theme-del {
+    margin-left: 2px; color: var(--tx-1); font-size: var(--fs-xs); line-height: 1;
+    opacity: 0.6; cursor: pointer;
+  }
+  .theme-del:hover { color: var(--danger); opacity: 1; }
+
+  .add-theme-btn {
+    font-size: var(--fs-xs); color: var(--tx-2); background: none; border: 1px dashed var(--bd-1);
+    border-radius: 4px; padding: 3px 8px; cursor: pointer; font-family: var(--font-family);
+  }
+  .add-theme-btn:hover { border-color: var(--bd-3); color: var(--text); }
+
+  #new-theme-form {
+    margin-top: 8px; display: flex; flex-direction: column; gap: 5px;
+    padding: 8px; background: var(--bg-3); border-radius: 4px; border: 1px solid var(--bd-1);
+  }
+  #new-theme-name {
+    width: 100%; background: var(--bg-2); border: 1px solid var(--bd-2);
+    border-radius: 4px; color: var(--text); font-size: var(--fs-sm); padding: 4px 8px;
+    outline: none; font-family: var(--font-family); user-select: text;
+  }
+  #new-theme-name:focus { border-color: var(--bd-3); }
+  .color-rows { display: flex; flex-direction: column; gap: 3px; }
+  .color-row { display: flex; align-items: center; gap: 6px; }
+  .color-label { font-size: var(--fs-xs); color: var(--tx-2); width: 52px; flex-shrink: 0; }
+  .color-row input[type=color] {
+    width: 28px; height: 22px; border: 1px solid var(--bd-2); border-radius: 3px;
+    padding: 1px 2px; background: var(--bg-2); cursor: pointer; flex-shrink: 0;
+  }
+  .hex-input {
+    flex: 1; background: var(--bg-2); border: 1px solid var(--bd-2); border-radius: 3px;
+    color: var(--tx-3); font-size: var(--fs-xs); padding: 2px 6px; outline: none;
+    font-family: 'SF Mono', 'Menlo', monospace; user-select: text;
+  }
+  .hex-input:focus { border-color: var(--bd-3); color: var(--text); }
+  .form-btns { display: flex; gap: 4px; margin-top: 2px; }
+  .form-btn {
+    padding: 3px 10px; border-radius: 3px; font-size: var(--fs-xs); cursor: pointer;
+    font-family: var(--font-family); border: 1px solid var(--bd-2); background: var(--bg-2); color: var(--tx-3);
+  }
+  .form-btn:hover { background: var(--bg-4); color: var(--text); }
+  .form-btn.primary { border-color: var(--accent); color: var(--accent); }
+  .form-btn.primary:hover { background: var(--bg-4); }
+
+  .client-item { display: flex; align-items: center; padding: 3px 0; gap: 6px; }
+  .client-name { flex: 1; font-size: var(--fs-sm); color: var(--tx-3); }
+  .client-del { color: var(--tx-1); font-size: var(--fs-sm); cursor: pointer; opacity: 0; line-height: 1; }
+  .client-item:hover .client-del { opacity: 1; }
+  .client-del:hover { color: var(--danger); }
+  #add-client-input {
+    width: 100%; background: var(--bg-2); border: 1px solid var(--bd-2);
+    border-radius: 4px; color: var(--text); font-size: var(--fs-sm); padding: 4px 8px;
+    outline: none; font-family: var(--font-family); user-select: text; margin-top: 4px;
+  }
+  #add-client-input:focus { border-color: var(--bd-3); }
+  #add-client-input::placeholder { color: var(--tx-1); }
+
+  .font-size-btn {
+    padding: 3px 8px; border-radius: 3px; border: 1px solid var(--bd-2);
+    background: var(--bg-2); color: var(--tx-3); font-size: var(--fs-xs);
+    font-family: var(--font-family); cursor: pointer;
+  }
+  .font-size-btn:hover { border-color: var(--bd-3); color: var(--text); }
+  .font-size-btn.active { border-color: var(--accent); color: var(--accent); }
+
+  .settings-dd-input {
+    width: 100%; background: var(--bg-2); border: 1px solid var(--bd-2);
+    border-radius: 4px; color: var(--text); font-size: var(--fs-sm); padding: 4px 8px;
+    outline: none; font-family: var(--font-family); user-select: text; cursor: text;
+  }
+  .settings-dd-input:focus { border-color: var(--bd-3); }
+
+  .panel-dd {
+    position: fixed; z-index: 9999;
+    background: var(--bg-2); border: 1px solid var(--bd-2); border-radius: 5px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+    overflow-y: auto; max-height: 200px;
+    display: none;
+  }
+  .panel-dd-item {
+    padding: 5px 10px; font-size: var(--fs-sm); color: var(--tx-3); cursor: pointer;
+  }
+  .panel-dd-item:hover { background: var(--bg-4); color: var(--text); }
+  .panel-dd-item.selected { color: var(--accent); }
+
+  .shortcut-row {
+    display: flex; align-items: center; padding: 3px 4px; gap: 6px;
+    font-size: var(--fs-xs); color: var(--tx-2);
+    cursor: pointer; border-radius: 3px;
+  }
+  .shortcut-row:hover { background: var(--bg-4); }
+  .shortcut-row.recording { background: var(--bg-4); outline: 1px solid var(--bd-3); }
+  .shortcut-row .sc-name { flex: 1; }
+  .sc-keys { display: flex; gap: 3px; align-items: center; flex-shrink: 0; }
+  .sc-keys kbd {
+    background: var(--bg-2); border: 1px solid var(--bd-2); border-radius: 3px;
+    padding: 1px 5px; font-size: var(--fs-xs); font-family: 'SF Mono', 'Menlo', monospace;
+    color: var(--tx-3); white-space: nowrap; line-height: 1.6;
+  }
+  .recording-hint { font-style: italic; color: var(--accent); font-size: var(--fs-xs); }
+  .settings-note {
+    font-size: var(--fs-xs); color: var(--tx-1); margin-top: 5px; line-height: 1.4;
+  }
+
+  .settings-action-btn {
+    display: flex; align-items: center; gap: 7px; width: 100%; text-align: left; padding: 6px 8px; border-radius: 4px;
+    border: 1px solid var(--bd-2); background: var(--bg-2); color: var(--tx-3);
+    font-size: var(--fs-xs); font-family: var(--font-family); cursor: pointer; margin-bottom: 4px;
+  }
+  .settings-action-btn svg { flex-shrink: 0; opacity: 0.7; }
+  .settings-action-btn:hover svg { opacity: 1; }
+  .settings-action-btn:hover { background: var(--bg-4); color: var(--text); border-color: var(--bd-3); }
+</style>
+</head>
+<body>
+
+<!-- ─── Task list view ──────────────────────────────────────── -->
+<div id="view-tasks">
+  <div id="new-task-area">
+    <input id="new-task-input" type="text" placeholder="Task name…" maxlength="120">
+    <div style="height:1px; background:var(--bd-1); margin:2px 0"></div>
+    <input id="new-task-client" type="text" placeholder="Client (optional — Tab to skip)" autocomplete="off">
+  </div>
+  <div id="task-list"></div>
+  <div id="divider"></div>
+  <div id="action-new" class="action-row">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2.5v11M2.5 8h11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    new task
+  </div>
+  <div id="action-sort" class="action-row">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M5 8h6M7 12h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    sort by client
+  </div>
+  <div id="action-grid" class="action-row">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.4"/></svg>
+    grid
+  </div>
+  <div id="action-history" class="action-row">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v3.5l2.2 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    history
+  </div>
+  <div id="action-settings" class="action-row">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.1" stroke="currentColor" stroke-width="1.3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+    settings
+  </div>
+  <div id="action-quit" class="action-row">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2v5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M5.2 4.1A5.5 5.5 0 1 0 10.8 4.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></svg>
+    quit
+  </div>
+</div>
+
+<!-- ─── Documentation view ─────────────────────────────────── -->
+<div id="view-docs">
+  <div class="view-header">
+    <span class="view-back" id="docs-back">‹</span>
+    <span class="view-title" id="docs-title"></span>
+  </div>
+  <div id="docs-link-row">
+    <span id="docs-link-icon">⌁</span>
+    <input id="docs-link-input" type="text" placeholder="Link (Zendesk, Trello, Notion…)">
+  </div>
+  <div id="docs-editor" contenteditable="true" spellcheck="true"></div>
+</div>
+
+<!-- ─── History view ───────────────────────────────────────── -->
+<div id="view-history">
+  <div class="view-header">
+    <span class="view-back" id="hist-back">‹</span>
+    <span class="view-title">History</span>
+  </div>
+  <div id="hist-list"></div>
+</div>
+
+<!-- ─── Settings view ──────────────────────────────────────── -->
+<div id="view-settings">
+  <div class="view-header">
+    <span class="view-back" id="settings-back">‹</span>
+    <span class="view-title">Settings</span>
+  </div>
+  <div id="settings-scroll">
+    <div class="settings-section">
+      <div class="settings-label">Theme</div>
+      <div class="theme-chips" id="theme-chips"></div>
+      <button class="add-theme-btn" id="add-theme-btn">+ custom theme</button>
+      <div id="new-theme-form" style="display:none">
+        <input id="new-theme-name" type="text" placeholder="Theme name…" autocomplete="off">
+        <div class="color-rows">
+          <div class="color-row">
+            <span class="color-label">Background</span>
+            <input type="color" id="nt-bg" value="#071918">
+            <input type="text" class="hex-input" id="nt-bg-hex" value="#071918" maxlength="7">
+          </div>
+          <div class="color-row">
+            <span class="color-label">Accent</span>
+            <input type="color" id="nt-accent" value="#2dd4bf">
+            <input type="text" class="hex-input" id="nt-accent-hex" value="#2dd4bf" maxlength="7">
+          </div>
+          <div class="color-row">
+            <span class="color-label">Danger</span>
+            <input type="color" id="nt-danger" value="#b060c0">
+            <input type="text" class="hex-input" id="nt-danger-hex" value="#b060c0" maxlength="7">
+          </div>
+          <div class="color-row">
+            <span class="color-label">Text</span>
+            <input type="color" id="nt-text" value="#c8ede8">
+            <input type="text" class="hex-input" id="nt-text-hex" value="#c8ede8" maxlength="7">
+          </div>
+        </div>
+        <div class="form-btns">
+          <button class="form-btn primary" id="nt-save">Save</button>
+          <button class="form-btn" id="nt-cancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-label">Font</div>
+      <div id="font-size-opts"></div>
+      <div id="font-family-opts" style="margin-top:5px"></div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-label">Clients</div>
+      <div id="client-list"></div>
+      <input id="add-client-input" type="text" placeholder="+ Add client… (Enter to save)">
+    </div>
+    <div class="settings-section">
+      <div class="settings-label">Display</div>
+      <div id="display-opts"></div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-label">Shortcuts</div>
+      <div id="shortcuts-list"></div>
+      <div class="settings-note">Click a shortcut to re-assign.</div>
+    </div>
+    <div class="settings-section">
+      <button class="settings-action-btn" id="open-settings-btn">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 1.5h7l3 3v8H2V1.5z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M9 1.5v3h3" stroke="currentColor" stroke-width="1.3"/></svg>
+        Open settings.json
+      </button>
+      <button class="settings-action-btn" id="reload-settings-btn">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7a5 5 0 1 1 5 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M2 4v3h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Reload config
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="panel-dd" id="panel-dd"></div>
+
+<script>
+  const api = window.jitlog;
+
+  let tasks            = [];
+  let highlighted      = -1;
+  let navItems         = [];
+  let newTaskVisible   = false;
+  let currentView      = 'tasks';
+  let docsTaskId       = null;
+  let saveTimer        = null;
+  let linkTimer        = null;
+  let currentSettings  = { clients: [], theme: 'teal', font: { size: 13 } };
+  let currentThemeVars = {};
+  let recordingShortcut = null;
+  let dragSrcId         = null;
+
+  // ── Theme / settings init ─────────────────────────────────────────────────
+  function applyTheme(vars) {
+    currentThemeVars = vars;
+    for (const [k, v] of Object.entries(vars)) {
+      document.documentElement.style.setProperty(k, v);
+    }
+  }
+
+  async function initSettings() {
+    currentSettings = await api.getSettings();
+    applyTheme(currentSettings.themeVars);
+    updateClientDatalist();
+  }
+
+  api.onApplyTheme((vars) => applyTheme(vars));
+  initSettings();
+
+  // ── Panel settings dropdown ───────────────────────────────────────────────
+  let _cachedSystemFonts = null;
+  async function getSystemFonts() {
+    if (_cachedSystemFonts) return _cachedSystemFonts;
+    if (!window.queryLocalFonts) return [];
+    try {
+      const fonts = await window.queryLocalFonts();
+      const seen = new Set();
+      _cachedSystemFonts = [];
+      for (const f of fonts) {
+        if (!seen.has(f.family)) { seen.add(f.family); _cachedSystemFonts.push(f.family); }
+      }
+      return _cachedSystemFonts;
+    } catch { return []; }
+  }
+
+  function attachPanelDd(input, getOptions, onSelect, currentValue) {
+    const dd = document.getElementById('panel-dd');
+    async function showDd() {
+      const opts = await Promise.resolve(getOptions(input.value));
+      dd.innerHTML = '';
+      if (!opts.length) { dd.style.display = 'none'; return; }
+      for (const opt of opts) {
+        const item = document.createElement('div');
+        item.className = 'panel-dd-item' + (opt.value === currentValue ? ' selected' : '');
+        item.textContent = opt.label;
+        if (opt.fontStack) item.style.fontFamily = opt.fontStack;
+        item.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          input.value = opt.label;
+          dd.style.display = 'none';
+          onSelect(opt.value);
+        });
+        dd.appendChild(item);
+      }
+      const rect = input.getBoundingClientRect();
+      dd.style.left = rect.left + 'px';
+      dd.style.top = (rect.bottom + 2) + 'px';
+      dd.style.width = rect.width + 'px';
+      dd.style.display = 'block';
+    }
+    input.addEventListener('focus', showDd);
+    input.addEventListener('input', showDd);
+    input.addEventListener('blur', () => setTimeout(() => { dd.style.display = 'none'; }, 100));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { dd.style.display = 'none'; input.blur(); }
+      e.stopPropagation();
+    });
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  function elapsed(task) {
+    let ms = 0;
+    for (const seg of task.segments) {
+      const s = new Date(seg.started_at).getTime();
+      const e = seg.stopped_at ? new Date(seg.stopped_at).getTime() : Date.now();
+      ms += e - s;
+    }
+    return Math.floor(ms / 1000);
+  }
+
+  function fmt(secs) {
+    const m = Math.floor(secs / 60), s = secs % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  function fmtDate(dateStr) {
+    return new Date(dateStr + 'T00:00:00')
+      .toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  function lastPausedOf(list) {
+    return list
+      .filter(t => t.status === 'paused' && t.segments.length > 0)
+      .sort((a, b) => {
+        const al = a.segments[a.segments.length - 1].stopped_at;
+        const bl = b.segments[b.segments.length - 1].stopped_at;
+        return new Date(bl) - new Date(al);
+      })[0] || null;
+  }
+
+  let _clientDdAttached = false;
+  function updateClientDatalist() {
+    if (_clientDdAttached) return;
+    _clientDdAttached = true;
+    const input = document.getElementById('new-task-client');
+    attachPanelDd(input, (filter) => {
+      const clients = currentSettings.clients || [];
+      const opts = clients.map(c => ({ label: c, value: c }));
+      if (!filter) return opts;
+      const f = filter.toLowerCase();
+      return opts.filter(o => o.label.toLowerCase().includes(f));
+    }, (val) => { input.value = val; }, null);
+  }
+
+  // ── View management ───────────────────────────────────────────────────────
+  function setView(v) {
+    document.getElementById('view-tasks').style.display    = v === 'tasks'    ? 'block' : 'none';
+    document.getElementById('view-docs').style.display     = v === 'docs'     ? 'block' : 'none';
+    document.getElementById('view-history').style.display  = v === 'history'  ? 'flex' : 'none';
+    document.getElementById('view-settings').style.display = v === 'settings' ? 'flex' : 'none';
+    document.body.style.overflow = (v === 'settings' || v === 'history') ? 'hidden' : '';
+    currentView = v;
+  }
+
+  async function showTasksView() { setView('tasks'); await render(); }
+
+  async function showDocsView(taskId) {
+    docsTaskId = taskId;
+    const task = await api.getTask(taskId);
+    if (!task) return;
+    document.getElementById('docs-title').textContent = task.name;
+    docsLinkInput.value = task.link || '';
+
+    const notes = task.notes || '';
+    if (notes.includes('<img') || notes.includes('<br') || notes.includes('<div')) {
+      docsEditor.innerHTML = notes;
+    } else {
+      docsEditor.innerHTML = '';
+      const lines = notes.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        docsEditor.appendChild(document.createTextNode(lines[i]));
+        if (i < lines.length - 1) docsEditor.appendChild(document.createElement('br'));
+      }
+      if (task.images && task.images.length) {
+        docsEditor.appendChild(document.createElement('br'));
+        for (const p of task.images) {
+          const img = document.createElement('img');
+          img.src = 'file://' + p; img.dataset.path = p;
+          docsEditor.appendChild(img);
+        }
+        saveDocs();
+      }
+    }
+    setView('docs');
+    api.resizePanel(390);
+    docsEditor.focus();
+  }
+
+  async function showHistoryView() {
+    setView('history');
+    await renderHistory();
+    api.resizePanel(500);
+  }
+
+  async function showSettingsView() {
+    currentSettings = await api.getSettings();
+    setView('settings');
+    await renderSettings();
+    api.resizePanel(660);
+  }
+
+  // ── Documentation ─────────────────────────────────────────────────────────
+  const docsEditor    = document.getElementById('docs-editor');
+  const docsLinkInput = document.getElementById('docs-link-input');
+
+  function saveDocs() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      if (docsTaskId) await api.updateNotes(docsTaskId, docsEditor.innerHTML);
+    }, 500);
+  }
+
+  docsLinkInput.addEventListener('input', () => {
+    clearTimeout(linkTimer);
+    linkTimer = setTimeout(async () => {
+      if (docsTaskId) await api.updateLink(docsTaskId, docsLinkInput.value.trim());
+    }, 500);
+  });
+  docsLinkInput.addEventListener('keydown', (e) => { e.stopPropagation(); });
+
+  docsEditor.addEventListener('input', saveDocs);
+
+  docsEditor.addEventListener('paste', async (e) => {
+    const items = Array.from((e.clipboardData || {}).items || []);
+    const imageItem = items.find(i => i.type.startsWith('image/'));
+    if (imageItem) {
+      e.preventDefault();
+      const blob = imageItem.getAsFile();
+      const buf = await blob.arrayBuffer();
+      const imgPath = await api.saveImage(Array.from(new Uint8Array(buf)));
+      const img = document.createElement('img');
+      img.src = 'file://' + imgPath; img.dataset.path = imgPath;
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents(); range.insertNode(img);
+        const after = document.createRange();
+        after.setStartAfter(img); after.collapse(true);
+        sel.removeAllRanges(); sel.addRange(after);
+      } else { docsEditor.appendChild(img); }
+      saveDocs();
+    } else {
+      e.preventDefault();
+      const text = e.clipboardData.getData('text/plain');
+      if (text) document.execCommand('insertText', false, text);
+    }
+  });
+
+  document.getElementById('docs-back').addEventListener('click', showTasksView);
+
+  // ── History ───────────────────────────────────────────────────────────────
+  async function renderHistory() {
+    const allTasks = await api.getAllTasks();
+    const list = document.getElementById('hist-list');
+    list.innerHTML = '';
+
+    if (!allTasks.length) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'text-align:center;color:var(--tx-1);padding:30px 0;';
+      empty.textContent = 'No tasks yet.';
+      list.appendChild(empty); return;
+    }
+
+    const byDate = {};
+    for (const t of allTasks) {
+      if (!byDate[t.date]) byDate[t.date] = [];
+      byDate[t.date].push(t);
+    }
+
+    for (const date of Object.keys(byDate).sort((a, b) => b.localeCompare(a))) {
+      const label = document.createElement('div');
+      label.className = 'date-label';
+      label.textContent = fmtDate(date);
+      list.appendChild(label);
+
+      for (const t of byDate[date]) {
+        const row = document.createElement('div');
+        row.className = 'hist-row';
+
+        const name = document.createElement('div');
+        name.className = 'hist-name'; name.textContent = t.name;
+
+        const client = document.createElement('div');
+        client.className = 'hist-client';
+        client.textContent = t.client || '';
+
+        const el = document.createElement('div');
+        el.className = 'hist-elapsed'; el.textContent = fmt(elapsed(t));
+
+        const revive = document.createElement('div');
+        revive.className = 'hist-icon hist-revive';
+        revive.textContent = '↩'; revive.title = 'Revive task (copies to today)';
+        revive.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await api.reviveTask(t.id);
+          api.refreshPanel();
+          renderHistory();
+        });
+
+        const del = document.createElement('div');
+        del.className = 'hist-icon hist-del';
+        del.textContent = '✕';
+        del.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await api.deleteTask(t.id);
+          renderHistory();
+        });
+
+        row.addEventListener('click', () => showDocsView(t.id));
+        row.appendChild(name);
+        if (t.client) row.appendChild(client);
+        row.appendChild(el);
+        row.appendChild(revive);
+        row.appendChild(del);
+        list.appendChild(row);
+      }
+    }
+  }
+
+  document.getElementById('hist-back').addEventListener('click', showTasksView);
+
+  // ── Settings ──────────────────────────────────────────────────────────────
+  const KEY_DISPLAY = {
+    Command: '⌘', Control: '⌃', Shift: '⇧', Alt: '⌥',
+    Return: '↩', Escape: 'Esc', Backspace: '⌫', Delete: '⌦',
+    '\\': '\\',
+  };
+
+  function fmtKey(k) { return KEY_DISPLAY[k] || k; }
+
+  function renderShortcutKbds(container, accel) {
+    container.innerHTML = '';
+    if (!accel) { container.textContent = '—'; return; }
+    for (const part of accel.split('+')) {
+      const kbd = document.createElement('kbd');
+      kbd.textContent = fmtKey(part);
+      container.appendChild(kbd);
+    }
+  }
+
+  function buildAccelerator(e) {
+    const modKeys = new Set(['Control', 'Shift', 'Alt', 'Meta', 'Command']);
+    if (modKeys.has(e.key)) return null;
+    const mods = [];
+    if (e.ctrlKey)  mods.push('Control');
+    if (e.metaKey)  mods.push('Command');
+    if (e.altKey)   mods.push('Alt');
+    if (e.shiftKey) mods.push('Shift');
+    if (!mods.length) return null;
+    const keyMap = { Enter: 'Return', ' ': 'Space', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right' };
+    const key = keyMap[e.key] || (e.key.length === 1 ? e.key.toUpperCase() : e.key);
+    return [...mods, key].join('+');
+  }
+
+  function previewColorForm() {
+    applyTheme({
+      '--bg':     document.getElementById('nt-bg').value,
+      '--accent': document.getElementById('nt-accent').value,
+      '--danger': document.getElementById('nt-danger').value,
+      '--text':   document.getElementById('nt-text').value,
+    });
+  }
+
+  async function renderSettings() {
+    const { builtin, custom } = await api.getThemes();
+
+    // Theme chips
+    const chipsEl = document.getElementById('theme-chips');
+    chipsEl.innerHTML = '';
+    const allThemes = { ...builtin, ...custom };
+    for (const [key, vars] of Object.entries(allThemes)) {
+      const isCustom = !!custom[key];
+      const chip = document.createElement('button');
+      chip.className = 'theme-chip' + (currentSettings.theme === key ? ' active' : '');
+
+      const swatch = document.createElement('span');
+      swatch.className = 'theme-swatch';
+      swatch.style.background = vars['--accent'];
+      swatch.style.boxShadow = `0 0 0 2px ${vars['--bg']}`;
+
+      chip.appendChild(swatch);
+      chip.appendChild(document.createTextNode(key.charAt(0).toUpperCase() + key.slice(1)));
+
+      // live hover preview
+      chip.addEventListener('mouseenter', () => {
+        for (const [k, v] of Object.entries(vars))
+          document.documentElement.style.setProperty(k, v);
+      });
+      chip.addEventListener('mouseleave', () => applyTheme(currentThemeVars));
+
+      chip.addEventListener('click', async () => {
+        currentSettings.theme = key;
+        currentSettings = await api.saveSettings(currentSettings);
+        renderSettings();
+      });
+
+      if (isCustom) {
+        const del = document.createElement('span');
+        del.className = 'theme-del'; del.textContent = '×';
+        del.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          currentSettings = await api.deleteCustomTheme(key);
+          renderSettings();
+        });
+        chip.appendChild(del);
+      }
+
+      chipsEl.appendChild(chip);
+    }
+
+    // Font size dropdown
+    const fontEl = document.getElementById('font-size-opts');
+    fontEl.innerHTML = '';
+    const currentSize = currentSettings.font?.size || 13;
+    const fontSizeInput = document.createElement('input');
+    fontSizeInput.type = 'text';
+    fontSizeInput.className = 'settings-dd-input';
+    fontSizeInput.setAttribute('autocomplete', 'off');
+    fontSizeInput.spellcheck = false;
+    fontSizeInput.value = currentSize + 'px';
+    fontEl.appendChild(fontSizeInput);
+    attachPanelDd(fontSizeInput, (filter) => {
+      const sizes = currentSettings.fontSizeOptions || [10,11,12,13,14,15,16,17,18,20,22,24];
+      const opts = sizes.map(s => ({ label: s + 'px', value: s }));
+      if (!filter) return opts;
+      const f = filter.replace(/px$/i, '').trim();
+      return opts.filter(o => String(o.value).startsWith(f));
+    }, async (size) => {
+      currentSettings.font = { ...currentSettings.font, size };
+      currentSettings = await api.saveSettings(currentSettings);
+      renderSettings();
+    }, currentSize);
+
+    // Font family dropdown
+    const familyEl = document.getElementById('font-family-opts');
+    familyEl.innerHTML = '';
+    const currentFamily = currentSettings.font?.family || 'system';
+    const predefined = currentSettings.fontFamilies || [];
+    const currentFamilyLabel = (() => {
+      const p = predefined.find(f => f.key === currentFamily);
+      return p ? p.label : currentFamily;
+    })();
+    const fontFamilyInput = document.createElement('input');
+    fontFamilyInput.type = 'text';
+    fontFamilyInput.className = 'settings-dd-input';
+    fontFamilyInput.setAttribute('autocomplete', 'off');
+    fontFamilyInput.spellcheck = false;
+    fontFamilyInput.value = currentFamilyLabel;
+    familyEl.appendChild(fontFamilyInput);
+    attachPanelDd(fontFamilyInput, async (filter) => {
+      const opts = predefined.map(f => ({ label: f.label, value: f.key, fontStack: f.stack }));
+      const sysFonts = await getSystemFonts();
+      const preLabels = new Set(predefined.map(f => f.label.toLowerCase()));
+      for (const fam of sysFonts) {
+        if (!preLabels.has(fam.toLowerCase())) opts.push({ label: fam, value: fam });
+      }
+      if (!filter) return opts;
+      const f = filter.toLowerCase();
+      return opts.filter(o => o.label.toLowerCase().includes(f));
+    }, async (family) => {
+      currentSettings.font = { ...currentSettings.font, family };
+      currentSettings = await api.saveSettings(currentSettings);
+      renderSettings();
+    }, currentFamily);
+
+    // Display options
+    const displayEl = document.getElementById('display-opts');
+    displayEl.innerHTML = '';
+
+    // Panel width
+    const widthRow = document.createElement('div');
+    widthRow.style.cssText = 'display:flex; gap:4px; margin-bottom:7px;';
+    for (const [key, label] of [['narrow','Narrow'],['normal','Normal'],['wide','Wide']]) {
+      const btn = document.createElement('button');
+      btn.className = 'font-size-btn' + ((currentSettings.panelWidth || 'normal') === key ? ' active' : '');
+      btn.textContent = label;
+      btn.addEventListener('click', async () => {
+        currentSettings.panelWidth = key;
+        currentSettings = await api.saveSettings(currentSettings);
+        renderSettings();
+      });
+      widthRow.appendChild(btn);
+    }
+    displayEl.appendChild(widthRow);
+
+
+    // Client list
+    const clientListEl = document.getElementById('client-list');
+    clientListEl.innerHTML = '';
+    for (const c of (currentSettings.clients || [])) {
+      const item = document.createElement('div');
+      item.className = 'client-item';
+      const nameEl = document.createElement('div');
+      nameEl.className = 'client-name'; nameEl.textContent = c;
+      const del = document.createElement('div');
+      del.className = 'client-del'; del.textContent = '✕';
+      del.addEventListener('click', async () => {
+        currentSettings.clients = currentSettings.clients.filter(x => x !== c);
+        currentSettings = await api.saveSettings(currentSettings);
+        updateClientDatalist();
+        renderSettings();
+      });
+      item.appendChild(nameEl); item.appendChild(del);
+      clientListEl.appendChild(item);
+    }
+
+    // Shortcuts
+    const scEl = document.getElementById('shortcuts-list');
+    scEl.innerHTML = '';
+    const sc = currentSettings.shortcuts || {};
+    for (const [key, label] of Object.entries(currentSettings.shortcutLabels || {})) {
+      const row = document.createElement('div');
+      row.className = 'shortcut-row' + (recordingShortcut === key ? ' recording' : '');
+      const name = document.createElement('span');
+      name.className = 'sc-name'; name.textContent = label;
+      const keys = document.createElement('div');
+      keys.className = 'sc-keys';
+      if (recordingShortcut === key) {
+        const hint = document.createElement('span');
+        hint.className = 'recording-hint'; hint.textContent = 'press shortcut…';
+        keys.appendChild(hint);
+      } else {
+        renderShortcutKbds(keys, sc[key]);
+      }
+      row.appendChild(name); row.appendChild(keys);
+      row.addEventListener('click', () => {
+        recordingShortcut = key;
+        renderSettings();
+      });
+      scEl.appendChild(row);
+    }
+  }
+
+  // ── New theme form ────────────────────────────────────────────────────────
+  const COLOR_FIELDS = ['bg', 'accent', 'danger', 'text'];
+
+  function syncColorPair(key) {
+    const picker = document.getElementById('nt-' + key);
+    const hex    = document.getElementById('nt-' + key + '-hex');
+    picker.addEventListener('input', () => { hex.value = picker.value; previewColorForm(); });
+    hex.addEventListener('input', () => {
+      if (/^#[0-9a-f]{6}$/i.test(hex.value)) { picker.value = hex.value; previewColorForm(); }
+    });
+    hex.addEventListener('keydown', (e) => e.stopPropagation());
+  }
+
+  COLOR_FIELDS.forEach(syncColorPair);
+
+  document.getElementById('add-theme-btn').addEventListener('click', () => {
+    // Pre-fill with current theme colors
+    const bg     = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    const danger = getComputedStyle(document.documentElement).getPropertyValue('--danger').trim();
+    const text   = getComputedStyle(document.documentElement).getPropertyValue('--text').trim();
+    for (const [id, val] of [['nt-bg', bg], ['nt-accent', accent], ['nt-danger', danger], ['nt-text', text]]) {
+      document.getElementById(id).value = val;
+      document.getElementById(id + '-hex').value = val;
+    }
+    document.getElementById('new-theme-form').style.display = 'flex';
+    document.getElementById('add-theme-btn').style.display = 'none';
+    document.getElementById('new-theme-name').focus();
+    reportHeight();
+  });
+
+  document.getElementById('nt-cancel').addEventListener('click', () => {
+    document.getElementById('new-theme-form').style.display = 'none';
+    document.getElementById('add-theme-btn').style.display = '';
+    applyTheme(currentThemeVars); // restore theme in case of live preview
+    reportHeight();
+  });
+
+  document.getElementById('new-theme-name').addEventListener('keydown', (e) => e.stopPropagation());
+
+  document.getElementById('nt-save').addEventListener('click', async () => {
+    const name = document.getElementById('new-theme-name').value.trim();
+    if (!name) { document.getElementById('new-theme-name').focus(); return; }
+    const vars = {
+      '--bg':     document.getElementById('nt-bg').value,
+      '--accent': document.getElementById('nt-accent').value,
+      '--danger': document.getElementById('nt-danger').value,
+      '--text':   document.getElementById('nt-text').value,
+    };
+    currentSettings = await api.saveCustomTheme(name, vars);
+    document.getElementById('new-theme-form').style.display = 'none';
+    document.getElementById('add-theme-btn').style.display = '';
+    document.getElementById('new-theme-name').value = '';
+    renderSettings();
+  });
+
+  const addClientInput = document.getElementById('add-client-input');
+  addClientInput.addEventListener('keydown', async (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      const val = addClientInput.value.trim();
+      if (val && !currentSettings.clients.includes(val)) {
+        currentSettings.clients = [...(currentSettings.clients || []), val];
+        currentSettings = await api.saveSettings(currentSettings);
+        updateClientDatalist();
+        renderSettings();
+      }
+      addClientInput.value = '';
+    } else if (e.key === 'Escape') {
+      addClientInput.value = '';
+    }
+  });
+
+  document.getElementById('open-settings-btn').addEventListener('click', () => api.openSettingsFile());
+  document.getElementById('reload-settings-btn').addEventListener('click', async () => {
+    api.reloadSettings();
+    currentSettings = await api.getSettings();
+    updateClientDatalist();
+    await renderSettings();
+  });
+  document.getElementById('settings-back').addEventListener('click', showTasksView);
+
+  // ── Task list render ───────────────────────────────────────────────────────
+  async function render() {
+    tasks = (await api.getTodayTasks())
+      .filter(t => t.name && t.name.trim())
+      .sort((a, b) => (a.slot || 99) - (b.slot || 99));
+    const list = document.getElementById('task-list');
+    list.innerHTML = ''; navItems = [];
+
+    for (let i = 0; i < tasks.length; i++) {
+      const t = tasks[i];
+      const row = document.createElement('div');
+      row.className = 'task-row' + (t.status === 'active' ? ' active-task' : '');
+      row.dataset.id = t.id;
+      row.draggable = true;
+
+      const num = document.createElement('span');
+      num.className = 'task-num';
+      num.textContent = t.slot === 10 ? '0' : (t.slot ? String(t.slot) : '');
+
+      const ico = document.createElement('span');
+      ico.className = 'task-icon ' + (t.status === 'active' ? 'active' : t.status === 'paused' ? 'paused' : '');
+      ico.textContent = t.status === 'active' ? '⏸' : t.status === 'paused' ? '▶' : '○';
+      ico.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (t.status === 'active') await api.pauseTask(t.id);
+        else await api.startTask(t.id);
+        await render();
+      });
+
+      const name = document.createElement('span');
+      name.className = 'task-name'; name.textContent = t.name;
+
+      const right = document.createElement('div');
+      right.className = 'task-right';
+
+      const time = document.createElement('span');
+      time.className = 'task-elapsed'; time.textContent = fmt(elapsed(t));
+
+      const actions = document.createElement('div');
+      actions.className = 'task-actions';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'act-btn'; copyBtn.textContent = 'copy';
+      copyBtn.addEventListener('click', (e) => { e.stopPropagation(); api.copyTaskContent(t.id); });
+
+      const openBtn = document.createElement('button');
+      openBtn.className = 'act-btn'; openBtn.textContent = 'open';
+      openBtn.addEventListener('click', (e) => { e.stopPropagation(); showDocsView(t.id); });
+
+      actions.appendChild(copyBtn); actions.appendChild(openBtn);
+      right.appendChild(time); right.appendChild(actions);
+
+      row.appendChild(num); row.appendChild(ico); row.appendChild(name);
+      row.appendChild(right);
+
+      row.addEventListener('click', () => switchTask(t.id));
+      row.addEventListener('dragstart', (e) => {
+        dragSrcId = t.id;
+        row.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      row.addEventListener('dragend', () => {
+        dragSrcId = null;
+        document.querySelectorAll('.task-row').forEach(r => r.classList.remove('dragging', 'drag-over'));
+      });
+      row.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (dragSrcId && t.id !== dragSrcId) row.classList.add('drag-over');
+      });
+      row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+      row.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        row.classList.remove('drag-over');
+        if (!dragSrcId || dragSrcId === t.id) return;
+        await api.swapTaskSlots(dragSrcId, t.id);
+        dragSrcId = null;
+        await render();
+      });
+      list.appendChild(row); navItems.push(row);
+    }
+
+    navItems.push(document.getElementById('action-new'));
+    navItems.push(document.getElementById('action-sort'));
+    navItems.push(document.getElementById('action-grid'));
+    navItems.push(document.getElementById('action-history'));
+    navItems.push(document.getElementById('action-settings'));
+    navItems.push(document.getElementById('action-quit'));
+
+    if (highlighted >= navItems.length) highlighted = -1;
+    updateHighlight();
+    reportHeight();
+  }
+
+  // ── Tick ──────────────────────────────────────────────────────────────────
+  function tick() {
+    if (currentView !== 'tasks') return;
+    for (const t of tasks) {
+      if (t.status !== 'active') continue;
+      const row = document.querySelector(`.task-row[data-id="${t.id}"]`);
+      if (!row) continue;
+      const timeEl = row.querySelector('.task-elapsed');
+      if (timeEl) timeEl.textContent = fmt(elapsed(t));
+    }
+  }
+
+  // ── Height reporting ───────────────────────────────────────────────────────
+  function reportHeight() {
+    if (currentView !== 'tasks') return;
+    requestAnimationFrame(() => {
+      const h = document.body.scrollHeight || document.documentElement.scrollHeight;
+      api.resizePanel(Math.max(96, Math.min(580, h + 2)));
+    });
+  }
+
+  // ── Switch task ────────────────────────────────────────────────────────────
+  async function switchTask(id) { await api.startTask(id); await render(); }
+
+  // ── Highlight ──────────────────────────────────────────────────────────────
+  function updateHighlight() {
+    navItems.forEach((el, i) => el.classList.toggle('highlighted', i === highlighted));
+  }
+
+  // ── New task ───────────────────────────────────────────────────────────────
+  function showNewTask() {
+    newTaskVisible = true;
+    const area = document.getElementById('new-task-area');
+    area.style.display = 'flex';
+    document.getElementById('new-task-input').value = '';
+    document.getElementById('new-task-client').value = '';
+    document.getElementById('new-task-input').focus();
+    reportHeight();
+  }
+
+  function hideNewTask() {
+    newTaskVisible = false;
+    document.getElementById('new-task-area').style.display = 'none';
+    reportHeight();
+  }
+
+  document.getElementById('new-task-input').addEventListener('keydown', async (e) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      document.getElementById('new-task-client').focus();
+    } else if (e.key === 'Enter') {
+      const val = e.target.value.trim();
+      if (val) {
+        const client = document.getElementById('new-task-client').value.trim();
+        await api.createTask(val, client);
+        hideNewTask(); await render();
+      }
+    } else if (e.key === 'Escape') {
+      hideNewTask();
+    }
+    e.stopPropagation();
+  });
+
+  document.getElementById('new-task-client').addEventListener('keydown', async (e) => {
+    if (e.key === 'Enter') {
+      const name = document.getElementById('new-task-input').value.trim();
+      if (name) {
+        const client = e.target.value.trim();
+        // Auto-add new clients to settings
+        if (client && !(currentSettings.clients || []).includes(client)) {
+          currentSettings.clients = [...(currentSettings.clients || []), client];
+          await api.saveSettings(currentSettings);
+          updateClientDatalist();
+        }
+        await api.createTask(name, client);
+        hideNewTask(); await render();
+      }
+    } else if (e.key === 'Escape') {
+      hideNewTask();
+    }
+    e.stopPropagation();
+  });
+
+  document.getElementById('action-new').addEventListener('click', showNewTask);
+  document.getElementById('action-grid').addEventListener('click', () => api.openGrid());
+  document.getElementById('action-sort').addEventListener('click', async () => {
+    await api.sortTasksByClient();
+    await render();
+  });
+  document.getElementById('action-history').addEventListener('click', showHistoryView);
+  document.getElementById('action-settings').addEventListener('click', showSettingsView);
+  document.getElementById('action-quit').addEventListener('click', () => api.quitApp());
+
+  // ── Keyboard ───────────────────────────────────────────────────────────────
+  document.addEventListener('keydown', async (e) => {
+    // Shortcut recording mode
+    if (recordingShortcut !== null) {
+      e.preventDefault();
+      if (e.key === 'Escape') {
+        recordingShortcut = null;
+        renderSettings();
+        return;
+      }
+      const accel = buildAccelerator(e);
+      if (!accel) return;
+      currentSettings.shortcuts = { ...(currentSettings.shortcuts || {}), [recordingShortcut]: accel };
+      currentSettings = await api.saveSettings(currentSettings);
+      recordingShortcut = null;
+      renderSettings();
+      return;
+    }
+
+    if (currentView === 'docs') {
+      if (e.key === 'Escape') { e.preventDefault(); showTasksView(); }
+      return;
+    }
+    if (currentView === 'history' || currentView === 'settings') {
+      if (e.key === 'Escape') showTasksView();
+      return;
+    }
+
+    if (newTaskVisible) return;
+
+    if (e.key === 'ArrowDown') {
+      highlighted = Math.min(highlighted + 1, navItems.length - 1); updateHighlight();
+    } else if (e.key === 'ArrowUp') {
+      highlighted = Math.max(highlighted - 1, 0); updateHighlight();
+    } else if (e.key === ' ') {
+      e.preventDefault();
+      const active = tasks.find(t => t.status === 'active');
+      if (active) { await api.pauseTask(active.id); }
+      else { const p = lastPausedOf(tasks); if (p) await api.startTask(p.id); }
+      await render();
+    } else if (e.key === 'Enter') {
+      const active = tasks.find(t => t.status === 'active');
+      if (active) { await api.archiveTask(active.id); await render(); }
+    } else if (e.key >= '1' && e.key <= '9') {
+      const idx = parseInt(e.key) - 1;
+      if (tasks[idx]) { await api.startTask(tasks[idx].id); await render(); }
+    } else if (e.key === 'c' || e.key === 'C') {
+      const t = tasks.find(t => t.status === 'active') || lastPausedOf(tasks);
+      if (t) api.copyTaskContent(t.id);
+    } else if (e.key === 'd' || e.key === 'D') {
+      const t = tasks.find(t => t.status === 'active') || lastPausedOf(tasks);
+      if (t) showDocsView(t.id);
+    } else if (e.key === 'h' || e.key === 'H') {
+      showHistoryView();
+    } else if (e.key === 'n' || e.key === 'N') {
+      showNewTask();
+    } else if (e.key === 'Escape') {
+      window.close();
+    }
+  });
+
+  // ── IPC events from main ───────────────────────────────────────────────────
+  api.onTick(() => tick());
+  api.onRefresh(() => { if (currentView === 'tasks') render(); });
+  api.onFocusNewTask(() => { if (currentView !== 'tasks') showTasksView(); else showNewTask(); });
+  api.onShowDocs(id => showDocsView(id));
+  api.onShowHistory(() => showHistoryView());
+
+  setView('tasks');
+  render();
+</script>
+</body>
+</html>

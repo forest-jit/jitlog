@@ -1,0 +1,126 @@
+<!doctype html>
+<html>
+    <head>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+            }
+            body {
+                background: transparent;
+                overflow: hidden;
+            }
+        </style>
+    </head>
+    <body>
+        <canvas id="c"></canvas>
+        <script>
+            const api = window.jitlog;
+
+            // 60pt × 22pt logical, rendered at 2x for Retina
+            const W = 60,
+                H = 22,
+                SCALE = 2;
+            const c = document.getElementById("c");
+            c.width = W * SCALE;
+            c.height = H * SCALE;
+
+            // Relative luminance for contrast decision (WCAG formula)
+            function luminance(hex) {
+                const r = parseInt(hex.slice(1, 3), 16) / 255;
+                const g = parseInt(hex.slice(3, 5), 16) / 255;
+                const b = parseInt(hex.slice(5, 7), 16) / 255;
+                const lin = (v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+                return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+            }
+
+            let lastPayload = null;
+            let animStart = null;
+            let animInterval = null;
+
+            function draw(phase) {
+                if (!lastPayload) return;
+                const { isActive, isIdle, timeSecs, accentColor } = lastPayload;
+
+                const ctx = c.getContext("2d");
+                ctx.clearRect(0, 0, c.width, c.height);
+                ctx.save();
+                ctx.scale(SCALE, SCALE);
+
+                const cy = H / 2 + 0.5;
+
+                // Shared layout constants — same in both states to prevent shifting
+                const ICON_X = 8;
+                const TIME_X = 17;
+
+                ctx.textBaseline = "middle";
+                ctx.font = "13px -apple-system, system-ui, sans-serif";
+                ctx.textAlign = "center";
+
+                if (isActive && accentColor) {
+                    // Pill background in accent color
+                    ctx.fillStyle = accentColor;
+                    ctx.beginPath();
+                    ctx.roundRect(1, 1, W - 2, H - 2, 5);
+                    ctx.fill();
+
+                    const textColor =
+                        luminance(accentColor) > 0.35
+                            ? "rgba(0,0,0,0.85)"
+                            : "rgba(255,255,255,0.95)";
+                    ctx.fillStyle = textColor;
+
+                    // ⏸ with pulsing opacity
+                    const pulse = 0.45 + 0.55 * Math.sin(phase * Math.PI * 2);
+                    ctx.globalAlpha = pulse;
+                    ctx.fillText("⏸", ICON_X, cy);
+                    ctx.globalAlpha = 1;
+                } else {
+                    // Idle/paused: monochrome template image
+                    ctx.fillStyle = "black";
+                    ctx.fillText("▶", ICON_X, cy);
+                }
+
+                // Time — always same position and format (mm:ss)
+                ctx.textAlign = "left";
+                ctx.font = '13px "SF Mono", "Menlo", "Courier New", monospace';
+                const m = (isActive || !isIdle) ? Math.floor(Math.max(0, timeSecs) / 60) : null;
+                const s = (isActive || !isIdle) ? Math.max(0, timeSecs) % 60 : null;
+                ctx.fillText(
+                    m === null ? "--:--" : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`,
+                    TIME_X,
+                    cy,
+                );
+
+                ctx.restore();
+                api.trayImageReady(c.toDataURL("image/png"), !(isActive && accentColor));
+            }
+
+            function startAnim() {
+                if (animInterval !== null) return;
+                animStart = Date.now();
+                animInterval = setInterval(() => {
+                    const phase = ((Date.now() - animStart) % 3000) / 3000;
+                    draw(phase);
+                }, 50);
+            }
+
+            function stopAnim() {
+                if (animInterval !== null) {
+                    clearInterval(animInterval);
+                    animInterval = null;
+                }
+            }
+
+            api.onRenderTray((payload) => {
+                lastPayload = payload;
+                if (payload.isActive && payload.accentColor) {
+                    startAnim();
+                } else {
+                    stopAnim();
+                    draw(0);
+                }
+            });
+        </script>
+    </body>
+</html>

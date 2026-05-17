@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:     #071918;
+    --accent: #2dd4bf;
+    --danger: #b060c0;
+    --text:   #c8ede8;
+
+    --bg-surface:   color-mix(in srgb, var(--bg), white 5%);
+    --bg-editor:    color-mix(in srgb, var(--bg), white 3%);
+    --bg-hover:     color-mix(in srgb, var(--bg), white 9%);
+    --border-sub:   color-mix(in srgb, var(--bg), white 15%);
+    --border:       color-mix(in srgb, var(--bg), white 22%);
+    --border-hi:    color-mix(in srgb, var(--bg), white 30%);
+    --text-dim:     color-mix(in srgb, var(--text), var(--bg) 73%);
+    --text-muted:   color-mix(in srgb, var(--text), var(--bg) 60%);
+    --text-sec:     color-mix(in srgb, var(--text), var(--bg) 22%);
+    --text-hi:      color-mix(in srgb, var(--text), white 10%);
+    --accent-dim:   color-mix(in srgb, var(--accent), var(--bg) 40%);
+    --accent-hover: color-mix(in srgb, var(--accent), white 12%);
+    --danger-dim:   color-mix(in srgb, var(--danger), var(--bg) 70%);
+    --danger-bg:    color-mix(in srgb, var(--danger), var(--bg) 88%);
+
+    --font-size: 13px;
+    --font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: transparent;
+    overflow: hidden;
+    font-family: var(--font-family);
+    font-size: var(--font-size);
+    color: var(--text);
+  }
+
+  #backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgb(from var(--bg) r g b / 0.72);
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+  }
+
+  #grid {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 10px;
+    padding: 10px 20px 20px;
+    height: calc(100vh - 38px);
+    margin-top: 38px;
+  }
+
+  /* ── Cards ── */
+  .slot {
+    background: rgb(from var(--bg) r g b / 0.95);
+    border: 1px solid var(--border-sub);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: border-color 0.12s;
+  }
+
+  .slot.active-slot { border-color: var(--accent); box-shadow: 0 0 0 1px rgb(from var(--accent) r g b / 0.2); }
+
+  /* paused card: subtly dimmed to distinguish from active */
+  .slot:not(.active-slot):not(.empty) { opacity: 0.82; }
+
+
+  /* ── Card header ── */
+  .slot-header {
+    display: flex; align-items: center;
+    padding: 7px 9px 6px; gap: 5px;
+    border-bottom: 1px solid var(--border-sub); flex-shrink: 0;
+  }
+
+  .slot-num { font-size: 10px; font-weight: 700; color: var(--text-dim); flex-shrink: 0; min-width: 11px; font-variant-numeric: tabular-nums; }
+
+  .slot-name { flex: 1; font-weight: 600; font-size: 12px; color: var(--text-hi); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .slot.active-slot .slot-name { color: var(--accent); }
+  .slot.active-slot .slot-name-input { color: var(--accent); }
+
+  .slot-btns { display: flex; gap: 3px; flex-shrink: 0; }
+
+  .slot-btn {
+    background: none; border: 1px solid var(--border); border-radius: 3px;
+    color: var(--accent-dim); font-size: 10px; padding: 1px 4px;
+    cursor: pointer; font-family: var(--font-family); line-height: 1.4; flex-shrink: 0;
+  }
+  .slot-btn:hover { background: var(--bg-hover); color: var(--text); border-color: var(--text-muted); }
+
+  .play-btn { font-size: 11px; padding: 1px 5px; }
+
+  .arch-btn { color: var(--danger-dim); border-color: var(--border-sub); }
+  .arch-btn:hover { background: var(--danger-bg); color: var(--danger); }
+
+  /* ── Client + Link rows (shared base) ── */
+  .slot-client-row, .slot-link-row {
+    display: flex; align-items: center;
+    padding: 4px 9px; gap: 5px;
+    border-bottom: 1px solid var(--bg-hover); flex-shrink: 0;
+  }
+
+  .row-icon { font-size: 11px; color: var(--text-muted); flex-shrink: 0; line-height: 1; }
+
+  .client-input, .link-input {
+    flex: 1; background: none; border: none; outline: none;
+    color: var(--text-sec); font-size: 11px; font-family: var(--font-family);
+    min-width: 0; user-select: text; -webkit-user-select: text;
+  }
+  .client-input::placeholder, .link-input::placeholder { color: var(--text-dim); }
+  .client-input:focus, .link-input:focus { color: var(--text); }
+
+  /* ── Notes editor ── */
+  .slot-editor {
+    flex: 1; overflow-y: auto; padding: 7px 9px; outline: none;
+    color: var(--text); font-size: 12px; line-height: 1.5;
+    white-space: pre-wrap; word-break: break-word; cursor: text;
+    user-select: text; -webkit-user-select: text;
+  }
+  .slot-editor img { max-width: 100%; display: block; margin: 4px 0; border-radius: 3px; }
+
+  /* ── Empty slot ── */
+  .slot.empty {
+    cursor: pointer; justify-content: center; align-items: center;
+    opacity: 0.50; border-style: dashed;
+  }
+  .slot.empty:hover { opacity: 0.75; border-color: var(--accent); border-style: solid; }
+
+  .empty-inner { text-align: center; pointer-events: none; }
+
+  .empty-num { font-size: 32px; font-weight: 700; color: var(--border-hi); line-height: 1; margin-bottom: 5px; }
+
+  .empty-label { font-size: 10px; color: var(--text-dim); letter-spacing: 0.5px; }
+
+  /* ── App bar ── */
+  #appbar {
+    position: fixed; top: 0; left: 0; right: 0; height: 38px; z-index: 2;
+    display: flex; align-items: center; gap: 6px; padding: 0 14px 0 14px;
+    background: rgb(from var(--bg) r g b / 0.85);
+    border-bottom: 1px solid var(--border-sub);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+  }
+  .appbar-btn {
+    display: flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: 4px;
+    border: 1px solid var(--border); background: none;
+    color: var(--text-muted); font-size: 11px; font-family: var(--font-family);
+    cursor: pointer; line-height: 1.4;
+  }
+  .appbar-btn:hover { background: var(--bg-hover); color: var(--text); border-color: var(--border-hi); }
+  .appbar-btn svg { flex-shrink: 0; }
+  .appbar-btn.danger { color: var(--danger-dim); border-color: var(--border-sub); }
+  .appbar-btn.danger:hover { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-dim); }
+  #appbar-close { margin-left: auto; }
+
+  /* ── Ctrl hint ── */
+  #hint {
+    position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+    z-index: 2; font-size: 10px; color: var(--text-dim); letter-spacing: 0.3px; pointer-events: none;
+  }
+
+  /* ── Inline name input for creating tasks ── */
+  .slot-name-input {
+    flex: 1; background: none; border: none; outline: none;
+    color: var(--text-hi); font-size: 12px; font-weight: 600;
+    font-family: var(--font-family); min-width: 0;
+    user-select: text; -webkit-user-select: text;
+  }
+  .slot-name-input::placeholder { color: var(--text-muted); font-weight: 400; }
+
+  /* ── Client dropdown ── */
+  #client-dd {
+    position: fixed;
+    z-index: 200;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.55);
+    display: none;
+    min-width: 140px;
+    max-height: 180px;
+    overflow-y: auto;
+  }
+  .client-opt {
+    padding: 6px 10px;
+    font-size: 11px;
+    font-family: var(--font-family);
+    color: var(--text-sec);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .client-opt:hover, .client-opt.dd-focused { background: var(--bg-hover); color: var(--text); }
+  .client-opt.dd-selected { color: var(--accent); }
+  .client-opt.dd-clear { color: var(--text-dim); font-style: italic; }
+
+</style>
+</head>
+<body>
+<div id="backdrop"></div>
+<div id="appbar">
+  <button class="appbar-btn" id="appbar-new">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 2v9M2 6.5h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    New task
+  </button>
+  <button class="appbar-btn" id="appbar-sort">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 3h9M4 6.5h5M6 10h1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    Sort by client
+  </button>
+  <button class="appbar-btn" id="appbar-copy">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="4.5" y="1.5" width="7" height="9" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M1.5 4v7.5a1 1 0 0 0 1 1h6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+    Copy summary
+  </button>
+  <button class="appbar-btn danger" id="appbar-archive-all">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 4h9M3.5 4l.5 6.5h5L10 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 4V2.5h3V4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Archive all
+  </button>
+  <button class="appbar-btn" id="appbar-close">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2.5 2.5l8 8M10.5 2.5l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    Close
+  </button>
+</div>
+<div id="grid"></div>
+<div id="client-dd"></div>
+<div id="hint">Ctrl + number to switch task · Tab to move to next display · Esc to close</div>
+
+<script>
+  const api = window.jitlog;
+  let slots = new Array(10).fill(null);
+
+  // ── Theme ────────────────────────────────────────────────────────────────────
+  function applyTheme(vars) {
+    for (const [k, v] of Object.entries(vars)) document.documentElement.style.setProperty(k, v);
+  }
+  api.onApplyTheme(applyTheme);
+  api.getSettings().then(s => applyTheme(s.themeVars));
+
+  // ── Client dropdown ──────────────────────────────────────────────────────────
+  let allClients = [];
+  let ddActiveInput = null;
+  let ddFocusIdx = -1;
+
+  async function loadClients() {
+    const s = await api.getSettings();
+    allClients = s.clients || [];
+  }
+
+  function renderClientDd(input, onSelect, filter) {
+    const dd = document.getElementById('client-dd');
+    const filtered = filter
+      ? allClients.filter(c => c.toLowerCase().includes(filter.toLowerCase()))
+      : allClients;
+
+    if (filtered.length === 0) { dd.style.display = 'none'; return; }
+
+    const rect = input.getBoundingClientRect();
+    dd.style.left = rect.left + 'px';
+    dd.style.top = (rect.bottom + 3) + 'px';
+    dd.style.minWidth = Math.max(rect.width, 140) + 'px';
+    dd.innerHTML = '';
+    ddFocusIdx = -1;
+    ddActiveInput = input;
+
+    for (const c of filtered) {
+      const opt = document.createElement('div');
+      opt.className = 'client-opt' + (c === input.value ? ' dd-selected' : '');
+      opt.textContent = c;
+      opt.dataset.value = c;
+      opt.addEventListener('mousedown', (e) => {
+        e.preventDefault(); // keeps focus on input so blur doesn't fire first
+        input.value = c;
+        onSelect(c);
+        closeClientDd();
+      });
+      dd.appendChild(opt);
+    }
+
+    dd.style.display = 'block';
+  }
+
+  function closeClientDd() {
+    document.getElementById('client-dd').style.display = 'none';
+    ddActiveInput = null;
+    ddFocusIdx = -1;
+  }
+
+  function ddMoveFocus(delta) {
+    const dd = document.getElementById('client-dd');
+    const opts = dd.querySelectorAll('.client-opt');
+    if (!opts.length) return;
+    opts.forEach(o => o.classList.remove('dd-focused'));
+    ddFocusIdx = Math.max(0, Math.min(ddFocusIdx + delta, opts.length - 1));
+    opts[ddFocusIdx].classList.add('dd-focused');
+    opts[ddFocusIdx].scrollIntoView({ block: 'nearest' });
+  }
+
+  function ddSelectFocused(input, onSelect) {
+    const dd = document.getElementById('client-dd');
+    const opts = dd.querySelectorAll('.client-opt');
+    if (ddFocusIdx >= 0 && ddFocusIdx < opts.length) {
+      const val = opts[ddFocusIdx].dataset.value;
+      input.value = val;
+      onSelect(val);
+      closeClientDd();
+    }
+  }
+
+  function attachClientDd(input, onSelect) {
+    let prevValue = input.value;
+
+    // Open (and filter) on focus — handles both click and Tab navigation
+    input.addEventListener('focus', () => {
+      renderClientDd(input, onSelect, input.value);
+    });
+
+    // Re-filter as user types
+    input.addEventListener('input', () => {
+      renderClientDd(input, onSelect, input.value);
+    });
+
+    // On blur: clear any value not in the list; save if changed
+    input.addEventListener('blur', () => {
+      const val = input.value.trim();
+      const resolved = (val === '' || allClients.includes(val)) ? val : '';
+      if (resolved !== val) input.value = resolved;
+      if (resolved !== prevValue) {
+        prevValue = resolved;
+        onSelect(resolved);
+      }
+      setTimeout(closeClientDd, 100);
+    });
+
+    input.addEventListener('keydown', (e) => {
+      const ddOpen = document.getElementById('client-dd').style.display === 'block';
+      if (ddOpen) {
+        if (e.key === 'ArrowDown') { e.preventDefault(); ddMoveFocus(1); return; }
+        if (e.key === 'ArrowUp')   { e.preventDefault(); ddMoveFocus(-1); return; }
+        if (e.key === 'Enter')     { e.preventDefault(); ddSelectFocused(input, onSelect); return; }
+        if (e.key === 'Escape')    { closeClientDd(); return; }
+      }
+      if (tryCtrlSwitch(e)) return;
+      if (e.key === 'Escape') api.closeGrid();
+      e.stopPropagation();
+    });
+  }
+
+  // ── Load and render ──────────────────────────────────────────────────────────
+  async function loadSlots() {
+    slots = await api.getSlots();
+    renderGrid();
+  }
+
+  function slotKey(i) { return i === 9 ? '0' : String(i + 1); }
+
+  function renderGrid() {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    for (let i = 0; i < 10; i++) {
+      grid.appendChild(slots[i] ? makeCard(slots[i], i) : makeEmptyCard(i));
+    }
+  }
+
+  // ── Shared switch handler (called from anywhere) ──────────────────────────────
+  async function switchToSlot(slotIdx) {
+    const task = slots[slotIdx];
+    if (task) {
+      await api.startTask(task.id);
+      await loadSlots();
+    } else {
+      const card = document.querySelector(`.slot[data-slot="${slotIdx + 1}"]`);
+      if (card && card.classList.contains('empty')) activateSlot(card, slotIdx + 1);
+    }
+  }
+
+  // Detect Ctrl+number from any keydown event; returns true if handled.
+  function tryCtrlSwitch(e) {
+    if (!e.ctrlKey || e.metaKey) return false;
+    let idx = null;
+    if (e.key >= '1' && e.key <= '9') idx = parseInt(e.key) - 1;
+    else if (e.key === '0') idx = 9;
+    if (idx === null) return false;
+    e.preventDefault();
+    e.stopPropagation();
+    switchToSlot(idx);
+    return true;
+  }
+
+  // ── Editor helper (shared between makeCard and activateSlot) ────────────────
+  function setupEditor(editor, taskId, notes) {
+    if (notes) {
+      if (notes.includes('<img') || notes.includes('<br') || notes.includes('<div')) {
+        editor.innerHTML = notes;
+      } else {
+        const lines = notes.split('\n');
+        for (let j = 0; j < lines.length; j++) {
+          editor.appendChild(document.createTextNode(lines[j]));
+          if (j < lines.length - 1) editor.appendChild(document.createElement('br'));
+        }
+      }
+    }
+    let saveTimer = null;
+    editor.addEventListener('input', () => {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => api.updateNotes(taskId, editor.innerHTML), 500);
+    });
+    editor.addEventListener('paste', async (ev) => {
+      const items = Array.from((ev.clipboardData || {}).items || []);
+      const imgItem = items.find(it => it.type.startsWith('image/'));
+      if (imgItem) {
+        ev.preventDefault();
+        const blob = imgItem.getAsFile();
+        const buf = await blob.arrayBuffer();
+        const imgPath = await api.saveImage(Array.from(new Uint8Array(buf)));
+        const img = document.createElement('img');
+        img.src = 'file://' + imgPath;
+        img.dataset.path = imgPath;
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount) {
+          const range = sel.getRangeAt(0);
+          range.deleteContents();
+          range.insertNode(img);
+          const after = document.createRange();
+          after.setStartAfter(img);
+          after.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(after);
+        } else {
+          editor.appendChild(img);
+        }
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => api.updateNotes(taskId, editor.innerHTML), 500);
+      } else {
+        ev.preventDefault();
+        const text = ev.clipboardData.getData('text/plain');
+        if (text) document.execCommand('insertText', false, text);
+      }
+    });
+    editor.addEventListener('keydown', (e) => {
+      if (tryCtrlSwitch(e)) return;
+      if (e.key === 'Escape') { api.closeGrid(); return; }
+      e.stopPropagation();
+    });
+  }
+
+  // ── Task card ────────────────────────────────────────────────────────────────
+  function makeCard(task, i) {
+    const card = document.createElement('div');
+    card.className = 'slot' + (task.status === 'active' ? ' active-slot' : '');
+    card.dataset.slot = i + 1;
+
+    // Header
+    const header = document.createElement('div');
+    header.className = 'slot-header';
+
+    const num = document.createElement('span');
+    num.className = 'slot-num';
+    num.textContent = slotKey(i);
+
+    const name = document.createElement('input');
+    name.className = 'slot-name-input';
+    name.type = 'text';
+    name.value = task.name;
+    name.maxLength = 120;
+    let nameTimer = null;
+    name.addEventListener('input', () => {
+      clearTimeout(nameTimer);
+      nameTimer = setTimeout(() => api.updateTaskName(task.id, name.value.trim()), 400);
+    });
+    name.addEventListener('keydown', (e) => {
+      if (tryCtrlSwitch(e)) return;
+      if (e.key === 'Escape') { api.closeGrid(); return; }
+      if (e.key === 'Enter') { name.blur(); return; }
+      e.stopPropagation();
+    });
+
+    const btns = document.createElement('div');
+    btns.className = 'slot-btns';
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'slot-btn';
+    copyBtn.textContent = 'copy';
+    copyBtn.addEventListener('click', (e) => { e.stopPropagation(); api.copyTaskContent(task.id); });
+
+    const playBtn = document.createElement('button');
+    playBtn.className = 'slot-btn play-btn';
+    playBtn.textContent = task.status === 'active' ? '⏸' : '▶';
+    playBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (task.status === 'active') await api.pauseTask(task.id);
+      else await api.startTask(task.id);
+      await loadSlots();
+    });
+
+    const archBtn = document.createElement('button');
+    archBtn.className = 'slot-btn arch-btn';
+    archBtn.textContent = '✕';
+    archBtn.title = 'Archive task';
+    archBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await api.archiveTask(task.id);
+      await loadSlots();
+    });
+
+    btns.appendChild(copyBtn);
+    btns.appendChild(playBtn);
+    btns.appendChild(archBtn);
+    header.appendChild(num);
+    header.appendChild(name);
+    header.appendChild(btns);
+
+    // Client row
+    const clientRow = document.createElement('div');
+    clientRow.className = 'slot-client-row';
+    const clientIcon = document.createElement('span');
+    clientIcon.className = 'row-icon';
+    clientIcon.textContent = '◎';
+    const clientInput = document.createElement('input');
+    clientInput.className = 'client-input';
+    clientInput.type = 'text';
+    clientInput.placeholder = 'Client…';
+    clientInput.value = task.client || '';
+    clientInput.autocomplete = 'off';
+    attachClientDd(clientInput, (val) => api.updateClient(task.id, val));
+    clientRow.appendChild(clientIcon);
+    clientRow.appendChild(clientInput);
+
+    // Link row
+    const linkRow = document.createElement('div');
+    linkRow.className = 'slot-link-row';
+    const linkIcon = document.createElement('span');
+    linkIcon.className = 'row-icon';
+    linkIcon.textContent = '⌁';
+    const linkInput = document.createElement('input');
+    linkInput.className = 'link-input';
+    linkInput.type = 'text';
+    linkInput.placeholder = 'Link (Zendesk, Trello, Notion…)';
+    linkInput.value = task.link || '';
+    let linkTimer = null;
+    linkInput.addEventListener('input', () => {
+      clearTimeout(linkTimer);
+      linkTimer = setTimeout(() => api.updateLink(task.id, linkInput.value.trim()), 500);
+    });
+    linkInput.addEventListener('keydown', (e) => {
+      if (tryCtrlSwitch(e)) return;
+      if (e.key === 'Escape') { api.closeGrid(); return; }
+      e.stopPropagation();
+    });
+    linkRow.appendChild(linkIcon);
+    linkRow.appendChild(linkInput);
+
+    // Notes editor
+    const editor = document.createElement('div');
+    editor.className = 'slot-editor';
+    editor.contentEditable = 'true';
+    editor.spellcheck = true;
+    editor.dataset.taskId = task.id;
+    setupEditor(editor, task.id, task.notes || '');
+
+    card.appendChild(header);
+    card.appendChild(clientRow);
+    card.appendChild(linkRow);
+    card.appendChild(editor);
+    return card;
+  }
+
+  // ── Empty card ───────────────────────────────────────────────────────────────
+  function makeEmptyCard(i) {
+    const card = document.createElement('div');
+    card.className = 'slot empty';
+    card.dataset.slot = i + 1;
+
+    const inner = document.createElement('div');
+    inner.className = 'empty-inner';
+
+    const num = document.createElement('div');
+    num.className = 'empty-num';
+    num.textContent = slotKey(i);
+
+    const lbl = document.createElement('div');
+    lbl.className = 'empty-label';
+    lbl.textContent = 'empty';
+
+    inner.appendChild(num);
+    inner.appendChild(lbl);
+    card.appendChild(inner);
+    card.addEventListener('click', () => {
+      if (card.classList.contains('empty')) activateSlot(card, i + 1);
+    });
+    return card;
+  }
+
+  // ── Click empty slot → create task immediately, show full card ───────────────
+  async function activateSlot(card, slotNum) {
+    const task = await api.createTaskInSlot('', slotNum, '');
+
+    card.classList.remove('empty');
+    card.innerHTML = '';
+
+    // Header with editable name input + buttons
+    const header = document.createElement('div');
+    header.className = 'slot-header';
+
+    const num = document.createElement('span');
+    num.className = 'slot-num';
+    num.textContent = slotNum === 10 ? '0' : String(slotNum);
+
+    const nameInput = document.createElement('input');
+    nameInput.className = 'slot-name-input';
+    nameInput.type = 'text';
+    nameInput.placeholder = 'Task name…';
+    nameInput.maxLength = 120;
+
+    const btns = document.createElement('div');
+    btns.className = 'slot-btns';
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'slot-btn';
+    copyBtn.textContent = 'copy';
+    copyBtn.addEventListener('click', (e) => { e.stopPropagation(); api.copyTaskContent(task.id); });
+
+    const playBtn = document.createElement('button');
+    playBtn.className = 'slot-btn play-btn';
+    playBtn.textContent = '▶';
+
+    const archBtn = document.createElement('button');
+    archBtn.className = 'slot-btn arch-btn';
+    archBtn.textContent = '✕';
+    archBtn.title = 'Archive task';
+    archBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await api.archiveTask(task.id);
+      await loadSlots();
+    });
+
+    btns.appendChild(copyBtn);
+    btns.appendChild(playBtn);
+    btns.appendChild(archBtn);
+    header.appendChild(num);
+    header.appendChild(nameInput);
+    header.appendChild(btns);
+
+    // Client row
+    const clientRow = document.createElement('div');
+    clientRow.className = 'slot-client-row';
+    const clientIcon = document.createElement('span');
+    clientIcon.className = 'row-icon';
+    clientIcon.textContent = '◎';
+    const clientInput = document.createElement('input');
+    clientInput.className = 'client-input';
+    clientInput.type = 'text';
+    clientInput.placeholder = 'Client…';
+    clientInput.autocomplete = 'off';
+    attachClientDd(clientInput, (val) => api.updateClient(task.id, val));
+    clientRow.appendChild(clientIcon);
+    clientRow.appendChild(clientInput);
+
+    // Link row
+    const linkRow = document.createElement('div');
+    linkRow.className = 'slot-link-row';
+    const linkIcon = document.createElement('span');
+    linkIcon.className = 'row-icon';
+    linkIcon.textContent = '⌁';
+    const linkInput = document.createElement('input');
+    linkInput.className = 'link-input';
+    linkInput.type = 'text';
+    linkInput.placeholder = 'Link (Zendesk, Trello, Notion…)';
+    let linkTimer = null;
+    linkInput.addEventListener('input', () => {
+      clearTimeout(linkTimer);
+      linkTimer = setTimeout(() => api.updateLink(task.id, linkInput.value.trim()), 500);
+    });
+    linkInput.addEventListener('keydown', (e) => {
+      if (tryCtrlSwitch(e)) return;
+      if (e.key === 'Escape') { api.closeGrid(); return; }
+      e.stopPropagation();
+    });
+    linkRow.appendChild(linkIcon);
+    linkRow.appendChild(linkInput);
+
+    // Notes editor
+    const editor = document.createElement('div');
+    editor.className = 'slot-editor';
+    editor.contentEditable = 'true';
+    editor.spellcheck = true;
+    editor.dataset.taskId = task.id;
+    setupEditor(editor, task.id, '');
+
+    card.appendChild(header);
+    card.appendChild(clientRow);
+    card.appendChild(linkRow);
+    card.appendChild(editor);
+
+    async function startTimer() {
+      const name = nameInput.value.trim();
+      if (name) await api.updateTaskName(task.id, name);
+      await api.startTask(task.id);
+      await loadSlots();
+    }
+
+    // Save name live as user types
+    let nameTimer = null;
+    nameInput.addEventListener('input', () => {
+      clearTimeout(nameTimer);
+      nameTimer = setTimeout(() => {
+        const name = nameInput.value.trim();
+        if (name) api.updateTaskName(task.id, name);
+      }, 400);
+    });
+
+    nameInput.addEventListener('keydown', async (e) => {
+      if (tryCtrlSwitch(e)) return;
+      e.stopPropagation();
+      if (e.key === 'Enter') { await startTimer(); return; }
+      if (e.key === 'Tab') { e.preventDefault(); clientInput.focus(); return; }
+      if (e.key === 'Escape') {
+        if (!nameInput.value.trim()) {
+          await api.deleteTask(task.id);
+          await loadSlots();
+        } else {
+          api.closeGrid();
+        }
+      }
+    });
+
+    clientInput.addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter' && document.getElementById('client-dd').style.display !== 'block') {
+        e.stopPropagation();
+        await startTimer();
+      }
+    });
+
+    playBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await startTimer();
+    });
+
+    requestAnimationFrame(() => nameInput.focus());
+  }
+
+  // ── Global keyboard handler (fires when nothing is focused) ──────────────────
+  document.addEventListener('keydown', async (e) => {
+    if (e.key === 'Escape') { api.closeGrid(); return; }
+
+    // Tab cycles between displays
+    if (e.key === 'Tab') { e.preventDefault(); api.cycleGridDisplay(); return; }
+
+    // Ctrl+number works from anywhere; unmodified number only when no input is focused
+    if (tryCtrlSwitch(e)) return;
+
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.contentEditable === 'true')) return;
+
+    let slotIdx = null;
+    if (e.key >= '1' && e.key <= '9') slotIdx = parseInt(e.key) - 1;
+    else if (e.key === '0') slotIdx = 9;
+
+    if (slotIdx !== null) switchToSlot(slotIdx);
+  });
+
+  document.getElementById('appbar-new').addEventListener('click', () => {
+    const emptyCard = document.querySelector('.slot.empty');
+    if (emptyCard) activateSlot(emptyCard, parseInt(emptyCard.dataset.slot));
+  });
+
+  document.getElementById('appbar-sort').addEventListener('click', async () => {
+    await api.sortTasksByClient();
+    await loadSlots();
+  });
+
+  document.getElementById('appbar-copy').addEventListener('click', async () => {
+    await api.copyDaySummary();
+  });
+
+  document.getElementById('appbar-archive-all').addEventListener('click', async () => {
+    await api.archiveAllTasks();
+    await loadSlots();
+  });
+
+  document.getElementById('appbar-close').addEventListener('click', () => api.closeGrid());
+
+  api.onRefresh(() => loadSlots());
+
+  loadSlots();
+  loadClients();
+</script>
+</body>
+</html>

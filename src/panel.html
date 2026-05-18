@@ -40,6 +40,7 @@
     background: var(--bg);
     color: var(--text);
     user-select: none;
+    overflow: hidden;
   }
 
   /* ─── Task list ──────────────────────────────────────────── */
@@ -1295,37 +1296,7 @@
       return;
     }
 
-    if (newTaskVisible) return;
-
-    if (e.key === 'ArrowDown') {
-      highlighted = Math.min(highlighted + 1, navItems.length - 1); updateHighlight();
-    } else if (e.key === 'ArrowUp') {
-      highlighted = Math.max(highlighted - 1, 0); updateHighlight();
-    } else if (e.key === ' ') {
-      e.preventDefault();
-      const active = tasks.find(t => t.status === 'active');
-      if (active) { await api.pauseTask(active.id); }
-      else { const p = lastPausedOf(tasks); if (p) await api.startTask(p.id); }
-      await render();
-    } else if (e.key === 'Enter') {
-      const active = tasks.find(t => t.status === 'active');
-      if (active) { await api.archiveTask(active.id); await render(); }
-    } else if (e.key >= '1' && e.key <= '9') {
-      const idx = parseInt(e.key) - 1;
-      if (tasks[idx]) { await api.startTask(tasks[idx].id); await render(); }
-    } else if (e.key === 'c' || e.key === 'C') {
-      const t = tasks.find(t => t.status === 'active') || lastPausedOf(tasks);
-      if (t) api.copyTaskContent(t.id);
-    } else if (e.key === 'd' || e.key === 'D') {
-      const t = tasks.find(t => t.status === 'active') || lastPausedOf(tasks);
-      if (t) showDocsView(t.id);
-    } else if (e.key === 'h' || e.key === 'H') {
-      showHistoryView();
-    } else if (e.key === 'n' || e.key === 'N') {
-      showNewTask();
-    } else if (e.key === 'Escape') {
-      window.close();
-    }
+    if (e.key === 'Escape') window.close();
   });
 
   // ── IPC events from main ───────────────────────────────────────────────────
